@@ -113,7 +113,7 @@ const commands = [
     )
 ];
 
-client.once('clientReady', async () => {
+client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
   if (process.env.CLIENT_ID && process.env.GUILD_ID) {
