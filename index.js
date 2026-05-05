@@ -134,6 +134,7 @@ client.once('clientReady', async () => {
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
+  console.log("Interaction received:", interaction.commandName);
   await interaction.deferReply();
 
   const sub = interaction.options.getSubcommand();
