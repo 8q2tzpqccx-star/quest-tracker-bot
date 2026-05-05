@@ -1,24 +1,30 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 
+// Create client
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
+// Data storage
 let data = { members: {}, panel: null };
 
+// Load data.json if exists
 if (fs.existsSync('./data.json')) {
   const saved = JSON.parse(fs.readFileSync('./data.json'));
   data.members = saved.members || {};
   data.panel = saved.panel || null;
 }
 
+// Save function
 function saveData() {
   fs.writeFileSync('./data.json', JSON.stringify(data, null, 2));
 }
 
+// Format names
 function formatName(name) {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
+// Build embed
 function buildEmbed() {
   let maxed = [];
   let complete = [];
@@ -28,155 +34,68 @@ function buildEmbed() {
     let q = data.members[name];
     let displayName = formatName(name);
 
-    if (q === 24) maxed.push(`🌟 **${displayName}** — 24/24`);
-    else if (q >= 18) complete.push(`✅ **${displayName}** — ${q}/24`);
-    else incomplete.push(`🟡 **${displayName}** — ${q}/18`);
+    if (q === 24) maxed.push(`✨ **${displayName}** - 24/24`);
+    else if (q >= 18) complete.push(`✅ **${displayName}** - ${q}/24`);
+    else incomplete.push(`⚪ **${displayName}** - ${q}/24`);
   }
 
-  const total = Object.keys(data.members).length;
-  const done = maxed.length + complete.length;
-
-  return new EmbedBuilder()
-    .setColor(0xF7C948)
-    .setTitle('🌼 Dandelions Guild Quest Tracker')
-    .setDescription(`**Completed 18+:** ${done}/${total}`)
+  const embed = new EmbedBuilder()
+    .setTitle("🌼 Quest Tracker")
+    .setColor(0xFFD700)
     .addFields(
-      { name: '🌟 Maxed 24 Quests', value: maxed.join('\n') || 'None yet' },
-      { name: '✅ Completed 18–23 Quests', value: complete.join('\n') || 'None yet' },
-      { name: '🟡 Not Complete Yet', value: incomplete.join('\n') || 'None yet' }
-    )
-    .setFooter({ text: 'Quest Tracker • 18 complete, 24 max' })
-    .setTimestamp();
+      { name: "✨ Maxed", value: maxed.join('\n') || "None", inline: false },
+      { name: "✅ Complete", value: complete.join('\n') || "None", inline: false },
+      { name: "⚪ Incomplete", value: incomplete.join('\n') || "None", inline: false }
+    );
+
+  return embed;
 }
 
-async function updatePanel(guild) {
-  if (!data.panel) return;
-
-  try {
-    const channel = await guild.channels.fetch(data.panel.channelId);
-    const message = await channel.messages.fetch(data.panel.messageId);
-    await message.edit({ embeds: [buildEmbed()] });
-  } catch (err) {
-    console.log('Could not update panel:', err.message);
-  }
-}
-
-const commands = [
-  new SlashCommandBuilder()
-    .setName('quest')
-    .setDescription('Quest tracker')
-    .addSubcommand(sub =>
-      sub.setName('panel')
-        .setDescription('Create the permanent quest tracker panel')
-    )
-    .addSubcommand(sub =>
-      sub.setName('set')
-        .setDescription('Set quest count')
-        .addStringOption(opt =>
-          opt.setName('name')
-            .setDescription('Member name')
-            .setRequired(true)
-        )
-        .addIntegerOption(opt =>
-          opt.setName('quests')
-            .setDescription('Quest number')
-            .setRequired(true)
-        )
-    )
-    .addSubcommand(sub =>
-      sub.setName('remove')
-        .setDescription('Remove a member from tracker')
-        .addStringOption(opt =>
-          opt.setName('name')
-            .setDescription('Member name')
-            .setRequired(true)
-        )
-    )
-    .addSubcommand(sub =>
-      sub.setName('status')
-        .setDescription('Show quest status once')
-    )
-    .addSubcommand(sub =>
-      sub.setName('reset')
-        .setDescription('Reset all quest counts')
-    )
-];
-
-const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-
-(async () => {
-  await rest.put(
-    Routes.applicationGuildCommands(config.clientId, config.guildId),
-    { body: commands }
-  );
-})();
-
-client.on('clientReady', () => {
+// When bot is ready
+client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
 
+// Handle interactions
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const sub = interaction.options.getSubcommand();
 
-  if (sub === 'panel') {
-    const msg = await interaction.reply({
-      embeds: [buildEmbed()],
-      fetchReply: true
-    });
-
-    data.panel = {
-      channelId: interaction.channelId,
-      messageId: msg.id
-    };
-
-    saveData();
-    return;
-  }
-
-  if (sub === 'set') {
+  if (sub === 'add') {
     const name = interaction.options.getString('name').toLowerCase();
-    const quests = interaction.options.getInteger('quests');
+    const amount = interaction.options.getInteger('amount');
 
-    if (quests < 0) return interaction.reply('Minimum is 0.');
-    if (quests > 24) return interaction.reply('Max is 24.');
-
-    data.members[name] = quests;
+    data.members[name] = amount;
     saveData();
 
-    await interaction.reply(`✅ **${formatName(name)}** set to **${quests}/24** quests.`);
-    await updatePanel(interaction.guild);
-    return;
+    await interaction.reply(`✅ Added **${formatName(name)}** with ${amount}/24`);
   }
 
   if (sub === 'remove') {
     const name = interaction.options.getString('name').toLowerCase();
 
     if (!(name in data.members)) {
-      return interaction.reply(`❌ **${formatName(name)}** is not in the tracker.`);
+      return interaction.reply(`❌ ${formatName(name)} is not in tracker`);
     }
 
     delete data.members[name];
     saveData();
 
-    await interaction.reply(`🗑️ Removed **${formatName(name)}** from tracker.`);
-    await updatePanel(interaction.guild);
-    return;
+    await interaction.reply(`🗑 Removed **${formatName(name)}**`);
   }
 
   if (sub === 'status') {
-    return interaction.reply({ embeds: [buildEmbed()] });
+    await interaction.reply({ embeds: [buildEmbed()] });
   }
 
   if (sub === 'reset') {
     data.members = {};
     saveData();
 
-    await interaction.reply('🔄 Quest tracker has been reset.');
-    await updatePanel(interaction.guild);
-    return;
+    await interaction.reply("♻️ Tracker reset");
   }
 });
 
+// 🔑 THIS IS THE IMPORTANT PART
 client.login(process.env.TOKEN);
