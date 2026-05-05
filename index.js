@@ -210,6 +210,6 @@ console.log('TOKEN exists:', !!process.env.TOKEN);
 console.log('CLIENT_ID exists:', !!process.env.CLIENT_ID);
 console.log('GUILD_ID exists:', !!process.env.GUILD_ID);
 
-client.login(process.env.TOKEN).catch(err => {
-  console.log('Login failed:', err.message);
-});
+client.login(process.env.TOKEN)
+  .then(() => console.log('LOGIN SUCCESS'))
+  .catch(err => console.log('LOGIN FAILED:', err.message));
