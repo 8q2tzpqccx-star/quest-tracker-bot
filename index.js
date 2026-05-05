@@ -1,4 +1,14 @@
 const express = require('express');
+const {
+  Client,
+  GatewayIntentBits,
+  SlashCommandBuilder,
+  REST,
+  Routes,
+  EmbedBuilder
+} = require('discord.js');
+const fs = require('fs');
+
 const app = express();
 
 app.get('/', (req, res) => {
@@ -9,14 +19,8 @@ app.listen(process.env.PORT || 3000, () => {
   console.log('Web server running');
 });
 
-const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
-const fs = require('fs');
-
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages
-  ]
+  intents: [GatewayIntentBits.Guilds]
 });
 
 let data = { members: {}, panel: null };
@@ -36,11 +40,11 @@ function formatName(name) {
 }
 
 function buildEmbed() {
-  let maxed = [];
-  let complete = [];
-  let incomplete = [];
+  const maxed = [];
+  const complete = [];
+  const incomplete = [];
 
-  for (let name in data.members) {
+  for (const name in data.members) {
     const q = data.members[name];
     const displayName = formatName(name);
 
@@ -116,30 +120,30 @@ const commands = [
       sub.setName('reset')
         .setDescription('Reset all quest counts')
     )
-];
+].map(command => command.toJSON());
 
 client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  if (process.env.CLIENT_ID && process.env.GUILD_ID) {
+  try {
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
-    try {
-      await rest.put(
-        Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
-        { body: commands }
-      );
-      console.log('Slash commands registered');
-    } catch (err) {
-      console.log('Could not register commands:', err.message);
-    }
+    await rest.put(
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+      { body: commands }
+    );
+
+    console.log('Slash commands registered');
+  } catch (err) {
+    console.log('Could not register commands:', err.message);
   }
 });
 
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  console.log("Interaction received:", interaction.commandName);
+  console.log('Interaction received:', interaction.commandName);
+
   await interaction.deferReply();
 
   const sub = interaction.options.getSubcommand();
@@ -202,5 +206,10 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-client.login(process.env.TOKEN);
+console.log('TOKEN exists:', !!process.env.TOKEN);
+console.log('CLIENT_ID exists:', !!process.env.CLIENT_ID);
+console.log('GUILD_ID exists:', !!process.env.GUILD_ID);
 
+client.login(process.env.TOKEN).catch(err => {
+  console.log('Login failed:', err.message);
+});
