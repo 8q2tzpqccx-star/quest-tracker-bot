@@ -8,104 +8,192 @@ app.get('/', (req, res) => {
 app.listen(process.env.PORT || 3000, () => {
   console.log('Web server running');
 });
+
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 
-// Create client
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// Data storage
 let data = { members: {}, panel: null };
 
-// Load data.json if exists
 if (fs.existsSync('./data.json')) {
   const saved = JSON.parse(fs.readFileSync('./data.json'));
   data.members = saved.members || {};
   data.panel = saved.panel || null;
 }
 
-// Save function
 function saveData() {
   fs.writeFileSync('./data.json', JSON.stringify(data, null, 2));
 }
 
-// Format names
 function formatName(name) {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-// Build embed
 function buildEmbed() {
   let maxed = [];
   let complete = [];
   let incomplete = [];
 
   for (let name in data.members) {
-    let q = data.members[name];
-    let displayName = formatName(name);
+    const q = data.members[name];
+    const displayName = formatName(name);
 
-    if (q === 24) maxed.push(`✨ **${displayName}** - 24/24`);
-    else if (q >= 18) complete.push(`✅ **${displayName}** - ${q}/24`);
-    else incomplete.push(`⚪ **${displayName}** - ${q}/24`);
+    if (q === 24) maxed.push(`🌟 **${displayName}** — 24/24`);
+    else if (q >= 18) complete.push(`✅ **${displayName}** — ${q}/24`);
+    else incomplete.push(`🟡 **${displayName}** — ${q}/18`);
   }
 
-  const embed = new EmbedBuilder()
-    .setTitle("🌼 Quest Tracker")
-    .setColor(0xFFD700)
-    .addFields(
-      { name: "✨ Maxed", value: maxed.join('\n') || "None", inline: false },
-      { name: "✅ Complete", value: complete.join('\n') || "None", inline: false },
-      { name: "⚪ Incomplete", value: incomplete.join('\n') || "None", inline: false }
-    );
+  const total = Object.keys(data.members).length;
+  const done = maxed.length + complete.length;
 
-  return embed;
+  return new EmbedBuilder()
+    .setColor(0xF7C948)
+    .setTitle('🌼 Dandelions Guild Quest Tracker')
+    .setDescription(`**Completed 18+:** ${done}/${total}`)
+    .addFields(
+      { name: '🌟 Maxed 24 Quests', value: maxed.join('\n') || 'None yet' },
+      { name: '✅ Completed 18–23 Quests', value: complete.join('\n') || 'None yet' },
+      { name: '🟡 Not Complete Yet', value: incomplete.join('\n') || 'None yet' }
+    )
+    .setFooter({ text: 'Quest Tracker • 18 complete, 24 max' })
+    .setTimestamp();
 }
 
-// When bot is ready
-client.once('ready', () => {
+async function updatePanel(guild) {
+  if (!data.panel) return;
+
+  try {
+    const channel = await guild.channels.fetch(data.panel.channelId);
+    const message = await channel.messages.fetch(data.panel.messageId);
+    await message.edit({ embeds: [buildEmbed()] });
+  } catch (err) {
+    console.log('Could not update panel:', err.message);
+  }
+}
+
+const commands = [
+  new SlashCommandBuilder()
+    .setName('quest')
+    .setDescription('Quest tracker')
+    .addSubcommand(sub =>
+      sub.setName('panel')
+        .setDescription('Create the permanent quest tracker panel')
+    )
+    .addSubcommand(sub =>
+      sub.setName('set')
+        .setDescription('Set quest count')
+        .addStringOption(opt =>
+          opt.setName('name')
+            .setDescription('Member name')
+            .setRequired(true)
+        )
+        .addIntegerOption(opt =>
+          opt.setName('quests')
+            .setDescription('Quest number')
+            .setRequired(true)
+        )
+    )
+    .addSubcommand(sub =>
+      sub.setName('remove')
+        .setDescription('Remove a member from tracker')
+        .addStringOption(opt =>
+          opt.setName('name')
+            .setDescription('Member name')
+            .setRequired(true)
+        )
+    )
+    .addSubcommand(sub =>
+      sub.setName('status')
+        .setDescription('Show quest status once')
+    )
+    .addSubcommand(sub =>
+      sub.setName('reset')
+        .setDescription('Reset all quest counts')
+    )
+];
+
+client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag}`);
+
+  if (process.env.CLIENT_ID && process.env.GUILD_ID) {
+    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
+    try {
+      await rest.put(
+        Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+        { body: commands }
+      );
+      console.log('Slash commands registered');
+    } catch (err) {
+      console.log('Could not register commands:', err.message);
+    }
+  }
 });
 
-// Handle interactions
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
+  await interaction.deferReply();
+
   const sub = interaction.options.getSubcommand();
 
-  if (sub === 'add') {
-    const name = interaction.options.getString('name').toLowerCase();
-    const amount = interaction.options.getInteger('amount');
+  if (sub === 'panel') {
+    await interaction.editReply({ embeds: [buildEmbed()] });
 
-    data.members[name] = amount;
+    const msg = await interaction.fetchReply();
+
+    data.panel = {
+      channelId: interaction.channelId,
+      messageId: msg.id
+    };
+
+    saveData();
+    return;
+  }
+
+  if (sub === 'set') {
+    const name = interaction.options.getString('name').toLowerCase();
+    const quests = interaction.options.getInteger('quests');
+
+    if (quests < 0) return interaction.editReply('Minimum is 0.');
+    if (quests > 24) return interaction.editReply('Max is 24.');
+
+    data.members[name] = quests;
     saveData();
 
-    await interaction.reply(`✅ Added **${formatName(name)}** with ${amount}/24`);
+    await interaction.editReply(`✅ **${formatName(name)}** set to **${quests}/24** quests.`);
+    await updatePanel(interaction.guild);
+    return;
   }
 
   if (sub === 'remove') {
     const name = interaction.options.getString('name').toLowerCase();
 
     if (!(name in data.members)) {
-      return interaction.reply(`❌ ${formatName(name)} is not in tracker`);
+      return interaction.editReply(`❌ **${formatName(name)}** is not in the tracker.`);
     }
 
     delete data.members[name];
     saveData();
 
-    await interaction.reply(`🗑 Removed **${formatName(name)}**`);
+    await interaction.editReply(`🗑️ Removed **${formatName(name)}** from tracker.`);
+    await updatePanel(interaction.guild);
+    return;
   }
 
   if (sub === 'status') {
-    await interaction.reply({ embeds: [buildEmbed()] });
+    return interaction.editReply({ embeds: [buildEmbed()] });
   }
 
   if (sub === 'reset') {
     data.members = {};
     saveData();
 
-    await interaction.reply("♻️ Tracker reset");
+    await interaction.editReply('🔄 Quest tracker has been reset.');
+    await updatePanel(interaction.guild);
+    return;
   }
 });
 
-// 🔑 THIS IS THE IMPORTANT PART
 client.login(process.env.TOKEN);
