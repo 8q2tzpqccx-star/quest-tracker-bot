@@ -12,7 +12,12 @@ app.listen(process.env.PORT || 3000, () => {
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages
+  ]
+});
 
 let data = { members: {}, panel: null };
 
