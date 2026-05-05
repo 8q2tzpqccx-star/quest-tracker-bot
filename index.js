@@ -210,9 +210,9 @@ console.log('TOKEN exists:', !!process.env.TOKEN);
 console.log('CLIENT_ID exists:', !!process.env.CLIENT_ID);
 console.log('GUILD_ID exists:', !!process.env.GUILD_ID);
 
-client.login(process.env.TOKEN);
-
 client.on('ready', () => {
   console.log('✅ BOT CONNECTED');
   console.log(`Logged in as ${client.user.tag}`);
 });
+
+client.login(process.env.TOKEN);
